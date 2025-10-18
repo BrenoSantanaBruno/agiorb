@@ -1,14 +1,39 @@
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    image: postgres:16
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: appdb
+      POSTGRES_DB: agiorb
+      ENABLE_DEV_ENDPOINTS: "true"
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agiorb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+  api:
+    build: .
+    environment:
+      APP_PORT: "8080"
+      JWT_SECRET: "super-secret-change-me"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/agiorb?sslmode=disable"
+      FRONTEND_DIST: "/app/frontend_dist"
+      UPLOAD_DIR: "/app/uploads"
+      ENABLE_DEV_ENDPOINTS: "true"   # <- HABILITA /api/dev/*
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - uploads:/app/uploads
+
+
 volumes:
-  db_data:
+  dbdata:
+  uploads:

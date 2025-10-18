@@ -1,52 +1,30 @@
 package config
 
-import (
-	"errors"
-	"os"
-	"strings"
-)
-
-type DBConfig struct {
-	DSN string
-}
+import "os"
 
 type Config struct {
-	Env         string
-	Port        string
-	DB          DBConfig
-	LogLevel    string
-	CORSOrigins []string
+	Port         string
+	JWTSecret    string
+	DatabaseURL  string
+	FrontendDist string
+	UploadDir    string
+	DevEndpoints bool
 }
 
-func Load() (*Config, error) {
-	cfg := &Config{
-		Env:         getEnv("APP_ENV", "dev"),
-		Port:        getEnv("APP_PORT", "8080"),
-		DB:          DBConfig{DSN: getEnv("DB_DSN", "")},
-		LogLevel:    getEnv("LOG_LEVEL", "info"),
-		CORSOrigins: splitOrStar(getEnv("CORS_ORIGINS", "*")),
-	}
-	if cfg.DB.DSN == "" {
-		return nil, errors.New("DB_DSN required")
-	}
-	return cfg, nil
-}
-
-func getEnv(k, def string) string {
+func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
 	}
 	return def
 }
 
-func splitOrStar(v string) []string {
-	v = strings.TrimSpace(v)
-	if v == "" || v == "*" {
-		return []string{"*"}
+func Load() Config {
+	return Config{
+		Port:         getenv("APP_PORT", "8080"),
+		JWTSecret:    getenv("JWT_SECRET", "dev-secret"),
+		DatabaseURL:  getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agiorb?sslmode=disable"),
+		FrontendDist: getenv("FRONTEND_DIST", "./frontend/dist"),
+		UploadDir:    getenv("UPLOAD_DIR", "./uploads"),
+		DevEndpoints: getenv("ENABLE_DEV_ENDPOINTS", "false") == "true",
 	}
-	parts := strings.Split(v, ",")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-	return parts
 }

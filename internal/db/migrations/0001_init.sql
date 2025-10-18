@@ -1,2 +1,0 @@
--- Placeholder for SQL migrations.
--- Currently using GORM AutoMigrate on startup (dev only).

@@ -15,7 +15,7 @@ import (
 	"github.com/brenosantanabruno/agiorb/internal/usecase"
 )
 
-func New(cfg *config.Config, logg zerolog.Logger, svc *usecase.MudaService) http.Handler {
+func New(cfg *config.Config, logg zerolog.Logger, mudaSvc *usecase.MudaService, authSvc *usecase.AuthService) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -23,7 +23,6 @@ func New(cfg *config.Config, logg zerolog.Logger, svc *usecase.MudaService) http
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
 	r.Use(middleware.Logger(logg))
-
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -32,6 +31,8 @@ func New(cfg *config.Config, logg zerolog.Logger, svc *usecase.MudaService) http
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+	// JWT extractor (optional for anonymous routes)
+	r.Use(middleware.WithAuth(authSvc, logg))
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -39,12 +40,24 @@ func New(cfg *config.Config, logg zerolog.Logger, svc *usecase.MudaService) http
 	})
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Post("/mudas", createMudaHandler(svc))
-		r.Get("/mudas/{id}", getMudaHandler(svc))
-		r.Get("/mudas", listMudasHandler(svc))
-		r.Put("/mudas/{id}", updateMudaHandler(svc))
-		r.Delete("/mudas/{id}", deleteMudaHandler(svc))
-		r.Post("/mudas/{id}/images", addImageHandler(svc))
+		// Auth
+		r.Post("/auth/register", registerHandler(authSvc))
+		r.Post("/auth/login", loginHandler(authSvc))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth)
+			r.Get("/auth/me", meHandler())
+		})
+
+		// Mudas: GETs public; writes require admin
+		r.Get("/mudas/{id}", getMudaHandler(mudaSvc))
+		r.Get("/mudas", listMudasHandler(mudaSvc))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth, middleware.RoleGuard("admin"))
+			r.Post("/mudas", createMudaHandler(mudaSvc))
+			r.Put("/mudas/{id}", updateMudaHandler(mudaSvc))
+			r.Delete("/mudas/{id}", deleteMudaHandler(mudaSvc))
+			r.Post("/mudas/{id}/images", addImageHandler(mudaSvc))
+		})
 	})
 
 	return r

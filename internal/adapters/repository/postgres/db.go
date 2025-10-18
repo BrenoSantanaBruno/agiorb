@@ -1,29 +1,29 @@
-package postgres
+package db
 
 import (
-	"fmt"
+	"database/sql"
+	"log"
+	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
-	"github.com/brenosantanabruno/agiorb/internal/domain"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func Open(dsn string) (*gorm.DB, func() error, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+func Connect(dsn string) *sql.DB {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, nil, err
+		log.Fatalf("db open: %v", err)
 	}
-	// AutoMigrate core tables (idempotent). Replace with real migrations in prod.
-	if err := db.AutoMigrate(&domain.Muda{}, &domain.MudaImage{}); err != nil {
-		return nil, nil, fmt.Errorf("automigrate: %w", err)
-	}
-	close := func() error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
+
+	// Retry ping (DB pode demorar a subir no compose)
+	var lastErr error
+	for i := 0; i < 30; i++ {
+		if err := db.Ping(); err == nil {
+			return db
+		} else {
+			lastErr = err
+			time.Sleep(1 * time.Second)
 		}
-		return sqlDB.Close()
 	}
-	return db, close, nil
+	log.Fatalf("db ping: %v", lastErr)
+	return db
 }
